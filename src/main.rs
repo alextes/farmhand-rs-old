@@ -1,5 +1,8 @@
 use cached::proc_macro::cached;
+use chrono::prelude::*;
+use chrono::Duration;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use std::collections::HashMap;
 use tide::prelude::json;
 use tide::{Request, Response, StatusCode};
@@ -33,11 +36,11 @@ async fn fetch_coingecko_id_map() -> Result<CoinGeckoIdMap, surf::Error> {
     Ok(id_map)
 }
 
-#[derive(Clone, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize)]
 struct SimplePrice {
-    usd: Option<f64>,
-    btc: Option<f64>,
-    eth: Option<f64>,
+    usd: f64,
+    btc: f64,
+    eth: f64,
 }
 
 #[cached(time = 600, result = true)]
@@ -73,12 +76,68 @@ async fn handle_get_price(req: Request<()>) -> tide::Result {
         .build())
 }
 
+async fn get_price_change(id: String, days_ago: i64) -> surf::Result<SimplePrice> {
+    let utc = Utc::now();
+    let date = utc - Duration::days(days_ago);
+    let uri = format!(
+        "https://api.coingecko.com/api/v3/coins/{}/history?date={}",
+        id,
+        date.format("%d-%m-%Y")
+    );
+
+    let history: Value = surf::get(uri).recv_json().await?;
+    let historic_price = SimplePrice {
+        usd: history["market_data"]["current_price"]["usd"]
+            .as_f64()
+            .unwrap(),
+        btc: history["market_data"]["current_price"]["btc"]
+            .as_f64()
+            .unwrap(),
+        eth: history["market_data"]["current_price"]["eth"]
+            .as_f64()
+            .unwrap(),
+    };
+
+    let current_price = get_prices_by_id(id.into()).await?;
+
+    let price_change = SimplePrice {
+        usd: current_price.usd / historic_price.usd,
+        btc: current_price.btc / historic_price.btc,
+        eth: current_price.eth / historic_price.eth,
+    };
+
+    Ok(price_change)
+}
+
+async fn handle_get_price_change(req: Request<()>) -> tide::Result {
+    let symbol = req.param("symbol").unwrap();
+    let days_ago = req.param("days_ago").unwrap();
+
+    let id_map = fetch_coingecko_id_map().await?;
+
+    let id = match id_map.get(symbol) {
+        Some(id) => id,
+        None => {
+            return Ok(Response::builder(StatusCode::NotFound)
+                .body(format!("no coingecko symbol found for {}", symbol))
+                .build())
+        }
+    };
+
+    let historic_prices = get_price_change(id.into(), days_ago.parse()?).await?;
+    Ok(Response::builder(StatusCode::Ok)
+        .body(json!(historic_prices))
+        .build())
+}
+
 #[async_std::main]
 async fn main() -> tide::Result<()> {
     tide::log::start();
     let mut app = tide::new();
 
     app.at("/coin/:symbol/price").get(handle_get_price);
+    app.at("/coin/:symbol/price-change/:days_ago")
+        .get(handle_get_price_change);
 
     app.listen("127.0.0.1:8080").await?;
     Ok(())
