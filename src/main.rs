@@ -10,7 +10,7 @@ use tide::{Request, Response, StatusCode};
 
 #[derive(Clone, Deserialize, Serialize, Debug)]
 struct Coin {
-    ticker: String,
+    symbol: String,
     current_price: f64,
 }
 
@@ -19,7 +19,7 @@ type CoinGeckoIdMap = HashMap<String, String>;
 #[derive(Debug, Deserialize)]
 struct CoinId {
     id: String,
-    ticker: String,
+    symbol: String,
     name: String,
 }
 
@@ -31,7 +31,7 @@ async fn fetch_coingecko_id_map() -> Result<CoinGeckoIdMap, surf::Error> {
 
     let mut id_map = HashMap::new();
     for raw_id in coingecko_id_list {
-        id_map.insert(raw_id.ticker, raw_id.id);
+        id_map.insert(raw_id.symbol, raw_id.id);
     }
 
     Ok(id_map)
@@ -57,15 +57,15 @@ async fn get_prices_by_id(id: String) -> surf::Result<Price> {
 }
 
 async fn handle_get_price(req: Request<()>) -> tide::Result {
-    let ticker = req.param("ticker").unwrap();
+    let symbol = req.param("symbol").unwrap();
 
     let id_map = fetch_coingecko_id_map().await?;
 
-    let id = match id_map.get(ticker) {
+    let id = match id_map.get(symbol) {
         Some(id) => id,
         None => {
             return Ok(Response::builder(StatusCode::NotFound)
-                .body(format!("no coingecko ticker found for {}", ticker))
+                .body(format!("no coingecko symbol found for {}", symbol))
                 .build())
         }
     };
@@ -111,16 +111,16 @@ async fn get_price_change(id: String, days_ago: i64) -> surf::Result<Price> {
 }
 
 async fn handle_get_price_change(req: Request<()>) -> tide::Result {
-    let ticker = req.param("ticker").unwrap();
+    let symbol = req.param("symbol").unwrap();
     let days_ago = req.param("days_ago").unwrap();
 
     let id_map = fetch_coingecko_id_map().await?;
 
-    let id = match id_map.get(ticker) {
+    let id = match id_map.get(symbol) {
         Some(id) => id,
         None => {
             return Ok(Response::builder(StatusCode::NotFound)
-                .body(format!("no coingecko ticker found for {}", ticker))
+                .body(format!("no coingecko symbol found for {}", symbol))
                 .build())
         }
     };
@@ -136,8 +136,8 @@ async fn main() -> tide::Result<()> {
     tide::log::start();
     let mut app = tide::new();
 
-    app.at("/coin/:ticker/price").get(handle_get_price);
-    app.at("/coin/:ticker/price-change/:days_ago")
+    app.at("/coin/:symbol/price").get(handle_get_price);
+    app.at("/coin/:symbol/price-change/:days_ago")
         .get(handle_get_price_change);
 
     let env = env::var("ENV").unwrap_or("dev".to_string());
