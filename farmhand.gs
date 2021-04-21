@@ -1,37 +1,69 @@
-function FHPRICE(symbol, base = "usd") {
-  var lowercaseSymbol = symbol.toLowerCase();
+/**
+ * Fetches the current price for a given token.
+ * example:
+ * =FHPRICE("BTC", "USD")
+ *
+ * @param {string} ticker - the ticker symbol you want the price for.
+ * @param {string} [base] - the currency to denominate the price in.
+ * @customfunction
+ * @return a price
+ **/
+function FHPRICE(ticker, base = "usd") {
+  if (ticker === undefined) {
+    throw new Error("need a ticker to quote")
+  }
+
+  var lowercaseTicker = ticker.toLowerCase();
+  var lowercaseBase = base.toLowerCase();
 
   var cache = CacheService.getScriptCache();
-  var cached = cache.get(`price-${lowercaseSymbol}-${base}`);
+  var cached = cache.get(`price-${lowercaseTicker}-${lowercaseBase}`);
   if (cached != null) {
+    console.log("cache hit");
     return cached;
   }
 
-  var response = UrlFetchApp.fetch(`https://farmhand-xebhza4nba-ew.a.run.app/coin/${lowercaseSymbol}/price`);
+  var response = UrlFetchApp.fetch(`https://farmhand-xebhza4nba-ew.a.run.app/coin/${lowercaseTicker}/price`);
   var price = JSON.parse(response.getContentText());
 
-  cache.put(`price-${symbol}-usd`, price.usd, 60);
-  cache.put(`price-${symbol}-btc`, price.btc, 60);
-  cache.put(`price-${symbol}-eth`, price.eth, 60);
+  cache.put(`price-${lowercaseTicker}-usd`, price.usd, 60);
+  cache.put(`price-${lowercaseTicker}-btc`, price.btc, 60);
+  cache.put(`price-${lowercaseTicker}-eth`, price.eth, 60);
 
-  return contents[base];
+  return price[lowercaseBase];
 }
 
-function FHCHANGE(symbol, daysAgo = 1, base = "usd") {
-  var lowercaseSymbol = symbol.toLowerCase();
+/**
+ * Calculates the percent change in a given token's price.
+ * example:
+ * =FHCHANGE("BTC", 7, "USD")
+ *
+ * @param {string} ticker - the ticker symbol of the token you want the price for.
+ * @param {string} [daysAgo] - number of days back in time to compare the price to.
+ * @param {string} [base] - the currency to denominate the price in.
+ * @customfunction
+ * @return a percent change in price
+ **/
+function FHCHANGE(ticker, daysAgo = 1, base = "usd") {
+  if (ticker === undefined) {
+    throw new Error("need a ticker to quote")
+  }
+
+  var lowercaseTicker = ticker.toLowerCase();
+  var lowercaseBase = base.toLowerCase();
 
   var cache = CacheService.getScriptCache();
-  var cached = cache.get(`pricechange-${lowercaseSymbol}-${base}`);
+  var cached = cache.get(`pricechange-${lowercaseTicker}-${lowercaseBase}`);
   if (cached != null) {
     return cached;
   }
 
-  var response = UrlFetchApp.fetch(`https://farmhand-xebhza4nba-ew.a.run.app/coin/${lowercaseSymbol}/price-change/${daysAgo}`);
+  var response = UrlFetchApp.fetch(`https://farmhand-xebhza4nba-ew.a.run.app/coin/${lowercaseTicker}/price-change/${daysAgo}`);
   var price = JSON.parse(response.getContentText());
 
-  cache.put(`pricechange-${lowercaseSymbol}-usd`, price.usd, 60);
-  cache.put(`pricechange-${lowercaseSymbol}-btc`, price.btc, 60);
-  cache.put(`pricechange-${lowercaseSymbol}-eth`, price.eth, 60);
+  cache.put(`pricechange-${lowercaseTicker}-usd`, price.usd, 60);
+  cache.put(`pricechange-${lowercaseTicker}-btc`, price.btc, 60);
+  cache.put(`pricechange-${lowercaseTicker}-eth`, price.eth, 60);
 
-  return contents[base];
+  return price[lowercaseBase];
 }
