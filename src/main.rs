@@ -102,9 +102,9 @@ async fn get_price_change(id: String, days_ago: i64) -> surf::Result<Price> {
     let current_price = get_prices_by_id(id.into()).await?;
 
     let price_change = Price {
-        usd: current_price.usd / historic_price.usd,
-        btc: current_price.btc / historic_price.btc,
-        eth: current_price.eth / historic_price.eth,
+        usd: current_price.usd / historic_price.usd - 1.0,
+        btc: current_price.btc / historic_price.btc - 1.0,
+        eth: current_price.eth / historic_price.eth - 1.0,
     };
 
     Ok(price_change)
