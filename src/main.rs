@@ -4,7 +4,6 @@ use chrono::Duration;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
-use std::env;
 use tide::prelude::json;
 use tide::{Request, Response, StatusCode};
 
@@ -140,8 +139,7 @@ async fn main() -> tide::Result<()> {
     app.at("/coin/:symbol/price-change/:days_ago")
         .get(handle_get_price_change);
 
-    let env = env::var("ENV").unwrap_or("dev".to_string());
-    if env == "dev" {
+    if cfg!(debug_assertions) {
         app.listen("127.0.0.1:8080").await?;
     } else {
         // Docker needs binding to 0.0.0.0
