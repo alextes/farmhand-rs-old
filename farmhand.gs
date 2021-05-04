@@ -82,9 +82,7 @@ function FHCHANGE(ticker, daysAgo = 1, base = "usd") {
   }
   var priceChange = JSON.parse(response.getContentText());
 
-  cache.put(`priceChange-${lowercaseTicker}-${daysAgo}-usd`, priceChange.usd, 3600);
-  cache.put(`priceChange-${lowercaseTicker}-${daysAgo}-btc`, priceChange.btc, 3600);
-  cache.put(`priceChange-${lowercaseTicker}-${daysAgo}-eth`, priceChange.eth, 3600);
+  cache.put(`priceChange-${lowercaseTicker}-${daysAgo}-${base}`, priceChange, 3600);
 
-  return Number(priceChange[lowercaseBase]);
+  return Number(priceChange);
 }
