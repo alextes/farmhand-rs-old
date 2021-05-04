@@ -72,7 +72,7 @@ function FHCHANGE(ticker, daysAgo = 1, base = "usd") {
     'method' : 'post',
     'contentType': 'application/json',
     'payload' : JSON.stringify({
-       base,
+       base: lowercaseBase,
        daysAgo,
     })
   };
@@ -82,7 +82,7 @@ function FHCHANGE(ticker, daysAgo = 1, base = "usd") {
   }
   var priceChange = JSON.parse(response.getContentText());
 
-  cache.put(`priceChange-${lowercaseTicker}-${daysAgo}-${base}`, priceChange, 3600);
+  cache.put(`priceChange-${lowercaseTicker}-${daysAgo}-${lowercaseBase}`, priceChange, 3600);
 
   return Number(priceChange);
 }
