@@ -38,4 +38,5 @@ We'd like to not hit the CoinGecko API for every requested price. We therefore i
 
 - The full list of tickers is cached for 24 hours.
 - A simple price is cached for 60 minutes.
-- A historic price is cached indefinitely.
+- A percent change is cached for 24 hours.
+- The most recently requested 100,000 historic prices are stored for percent change calculation.
