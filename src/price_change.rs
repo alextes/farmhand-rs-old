@@ -68,10 +68,13 @@ async fn get_price_change(
     let historic_price =
         get_historic_price(historic_price_cache.clone(), id, base, days_ago).await?;
 
-    let today_timestamp = Utc::now()
+    let m_today_timestamp = Utc::now()
         .duration_trunc(Duration::days(1))
-        .unwrap()
-        .timestamp();
+        .map(|dt| { dt.timestamp()});
+    let today_timestamp = match m_today_timestamp {
+        Ok(dt) => dt,
+        Err(err) => panic!("{}", err),
+    };
     let mut _guard: MutexGuardArc<LruCache<String, f64>> = historic_price_cache.lock_arc().await;
     let key = format!("{}-{}-{}", today_timestamp, id, base);
     let m_today_price = (*_guard).get(&key);
