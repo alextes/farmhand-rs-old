@@ -1,6 +1,8 @@
 use crate::base::Base;
 use crate::{id, HistoricPriceCache, ServerState};
+use async_std::sync::MutexGuardArc;
 use chrono::{Duration, DurationRound, Utc};
+use lru::LruCache;
 use serde::Deserialize;
 use std::convert::TryInto;
 use tide::prelude::*;
@@ -22,7 +24,7 @@ struct History {
 }
 
 async fn get_historic_price(
-    historic_price_cache_arc: HistoricPriceCache,
+    historic_price_cache: HistoricPriceCache,
     id: &String,
     base: &Base,
     days_ago: &i32,
@@ -31,7 +33,8 @@ async fn get_historic_price(
     let days_ago_i64 = (*days_ago).try_into().unwrap();
     let target_timestamp = (start_of_today - Duration::days(days_ago_i64)).timestamp();
     let key = format!("{}-{}-{}", target_timestamp, id, base);
-    let mut _guard = historic_price_cache_arc.lock_arc().await;
+    let mut _guard: MutexGuardArc<LruCache<std::string::String, f64>> =
+        historic_price_cache.lock_arc().await;
 
     let m_historic_price = (*_guard).get(&key);
     if m_historic_price.is_some() {
@@ -69,12 +72,19 @@ async fn get_price_change(
         .duration_trunc(Duration::days(1))
         .unwrap()
         .timestamp();
-    let mut _guard = historic_price_cache.lock_arc().await;
+    let mut _guard: MutexGuardArc<LruCache<String, f64>> = historic_price_cache.lock_arc().await;
     let key = format!("{}-{}-{}", today_timestamp, id, base);
-    let today_price = (*_guard).get(&key).unwrap();
+    let m_today_price = (*_guard).get(&key);
 
-    Ok(*today_price / historic_price - 1.0)
+    let today_price = if m_today_price.is_some() {
+        m_today_price.unwrap().to_owned()
+    } else {
+        get_historic_price(historic_price_cache, id, base, days_ago).await?
+    };
+
+    Ok(today_price / historic_price - 1.0)
 }
+
 pub async fn handle_get_price_change(mut req: Request<ServerState>) -> tide::Result {
     let Body { base, days_ago } = req.body_json().await?;
     let symbol = req.param("symbol").unwrap();
