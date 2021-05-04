@@ -1,0 +1,75 @@
+use crate::base::Base;
+use crate::HistoricPriceCache;
+use chrono::{Duration, DurationRound, Utc};
+use serde::Deserialize;
+use std::convert::TryInto;
+
+/// Timestamp in miliseconds
+type MsTimestamp = i64;
+/// A price for a cryptocurrency
+type Price = f64;
+type PriceInTime = (MsTimestamp, Price);
+type NumberInTime = (MsTimestamp, Price);
+
+#[derive(Debug, Deserialize)]
+/// CoinGecko price history for a cryptocurrency
+struct History {
+    prices: Vec<PriceInTime>,
+    market_caps: Vec<NumberInTime>,
+    total_volumes: Vec<NumberInTime>,
+}
+
+async fn get_historic_price(
+    historic_price_cache_arc: HistoricPriceCache,
+    id: &String,
+    base: &Base,
+    days_ago: &i32,
+) -> surf::Result<f64> {
+    let start_of_today = Utc::now().duration_trunc(Duration::days(1)).unwrap();
+    let days_ago_i64 = (*days_ago).try_into().unwrap();
+    let target_timestamp = (start_of_today - Duration::days(days_ago_i64)).timestamp();
+    let key = format!("{}-{}-{}", target_timestamp, id, base);
+    let mut _guard = historic_price_cache_arc.lock_arc().await;
+
+    let m_historic_price = (*_guard).get(&key);
+    if m_historic_price.is_some() {
+        return Ok(m_historic_price.unwrap().clone());
+    }
+
+    // CoinGecko uses 'days' as today up to but excluding n 'days' ago, we want
+    // including so we add 1 here.
+    let coingecko_days_ago = days_ago + 1;
+    let uri = format!("https://api.coingecko.com/api/v3/coins/{id}/market_chart?vs_currency={base}&days={coingecko_days_ago}&interval=daily", id=id, base=base, coingecko_days_ago=coingecko_days_ago);
+    let history: History = surf::get(uri).recv_json().await?;
+
+    for (ms_timestamp, price) in &history.prices {
+        // to unix time
+        let timestamp = ms_timestamp / 1000;
+        let historic_price_key = format!("{}-{}-{}", timestamp, id, base);
+        (*_guard).put(historic_price_key, price.to_owned());
+    }
+
+    let (_, price) = history.prices.first().unwrap().to_owned();
+
+    Ok(price)
+}
+
+pub async fn get_price_change(
+    historic_price_cache: HistoricPriceCache,
+    id: &String,
+    base: &Base,
+    days_ago: &i32,
+) -> surf::Result<f64> {
+    let historic_price =
+        get_historic_price(historic_price_cache.clone(), id, base, days_ago).await?;
+
+    let today_timestamp = Utc::now()
+        .duration_trunc(Duration::days(1))
+        .unwrap()
+        .timestamp();
+    let mut _guard = historic_price_cache.lock_arc().await;
+    let key = format!("{}-{}-{}", today_timestamp, id, base);
+    let today_price = (*_guard).get(&key).unwrap();
+
+    Ok(*today_price / historic_price - 1.0)
+}
