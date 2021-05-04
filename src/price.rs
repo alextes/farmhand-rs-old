@@ -45,9 +45,18 @@ pub async fn handle_get_price(req: Request<ServerState>) -> tide::Result {
         }
     };
 
-    let prices = fetch_multi_price(id).await?;
-
-    Ok(Response::builder(StatusCode::Ok)
-        .body(json!(prices))
-        .build())
+    fetch_multi_price(id).await.map_or_else(
+        |err| {
+            if err.status() == StatusCode::TooManyRequests {
+                Ok(Response::new(StatusCode::TooManyRequests))
+            } else {
+                Err(err)
+            }
+        },
+        |prices| {
+            Ok(Response::builder(StatusCode::Ok)
+                .body(json!(prices))
+                .build())
+        },
+    )
 }

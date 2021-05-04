@@ -70,7 +70,7 @@ async fn get_price_change(
 
     let m_today_timestamp = Utc::now()
         .duration_trunc(Duration::days(1))
-        .map(|dt| { dt.timestamp()});
+        .map(|dt| dt.timestamp());
     let today_timestamp = match m_today_timestamp {
         Ok(dt) => dt,
         Err(err) => panic!("{}", err),
@@ -79,17 +79,14 @@ async fn get_price_change(
     let key = format!("{}-{}-{}", today_timestamp, id, base);
     let m_today_price = (*_guard).get(&key);
 
-    let today_price = if m_today_price.is_some() {
-        m_today_price.unwrap().to_owned()
-    } else {
-        get_historic_price(historic_price_cache, id, base, days_ago).await?
+    return match m_today_price {
+        Some(price) => Ok(price.to_owned() / historic_price - 1.0),
+        None => get_historic_price(historic_price_cache, id, base, days_ago).await,
     };
-
-    Ok(today_price / historic_price - 1.0)
 }
 
 pub async fn handle_get_price_change(mut req: Request<ServerState>) -> tide::Result {
-    let Body { base, days_ago } = req.body_json().await?;
+    let Body { base, days_ago } = req.body_json().await.unwrap();
     let symbol = req.param("symbol").unwrap();
 
     #[derive(Debug, Deserialize)]
@@ -113,8 +110,19 @@ pub async fn handle_get_price_change(mut req: Request<ServerState>) -> tide::Res
     };
 
     let cache = req.state().cache.clone();
-    let historic_prices = get_price_change(cache, id, &base, &days_ago).await?;
-    Ok(Response::builder(StatusCode::Ok)
-        .body(json!(historic_prices))
-        .build())
+    let m_historic_prices = get_price_change(cache, id, &base, &days_ago).await;
+    m_historic_prices.map_or_else(
+        |err| {
+            if err.status() == StatusCode::TooManyRequests {
+                Ok(Response::new(StatusCode::TooManyRequests))
+            } else {
+                Err(err)
+            }
+        },
+        |historic_prices| {
+            Ok(Response::builder(StatusCode::Ok)
+                .body(json!(historic_prices))
+                .build())
+        },
+    )
 }
