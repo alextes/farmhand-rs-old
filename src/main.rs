@@ -1,66 +1,31 @@
-use cached::proc_macro::cached;
-use chrono::prelude::*;
-use chrono::Duration;
-use serde::{Deserialize, Serialize};
-use serde_json::Value;
-use std::collections::HashMap;
+mod base;
+mod id;
+mod price;
+mod price_change;
+
+use async_std::sync::Mutex;
+use base::Base;
+use lru::LruCache;
+use serde::Deserialize;
+use std::sync::Arc;
 use tide::prelude::json;
 use tide::{Request, Response, StatusCode};
 
-#[derive(Clone, Deserialize, Serialize, Debug)]
-struct Coin {
-    symbol: String,
-    current_price: f64,
+pub type HistoricPriceCache = Arc<Mutex<LruCache<String, f64>>>;
+
+#[derive(Clone)]
+pub struct State {
+    cache: HistoricPriceCache,
 }
 
-type CoinGeckoIdMap = HashMap<String, String>;
-
-#[derive(Debug, Deserialize)]
-struct CoinId {
-    id: String,
-    symbol: String,
-    name: String,
-}
-
-#[cached(time = 3600, result = true)]
-async fn fetch_coingecko_id_map() -> Result<CoinGeckoIdMap, surf::Error> {
-    let coingecko_id_list: Vec<CoinId> = surf::get("https://api.coingecko.com/api/v3/coins/list")
-        .recv_json()
-        .await?;
-
-    let mut id_map = HashMap::new();
-    for raw_id in coingecko_id_list {
-        id_map.insert(raw_id.symbol, raw_id.id);
-    }
-
-    Ok(id_map)
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize)]
-struct Price {
-    usd: f64,
-    btc: f64,
-    eth: f64,
-}
-
-#[cached(time = 600, result = true)]
-async fn get_prices_by_id(id: String) -> surf::Result<Price> {
-    let uri = format!(
-        "https://api.coingecko.com/api/v3/simple/price?ids={}&vs_currencies=usd%2Cbtc%2Ceth",
-        id
-    );
-    let prices: HashMap<String, Price> = surf::get(uri).recv_json().await?;
-
-    let price = prices.get(&id).unwrap();
-    Ok(price.clone())
-}
-
-async fn handle_get_price(req: Request<()>) -> tide::Result {
+async fn handle_get_price(req: Request<State>) -> tide::Result {
     let symbol = req.param("symbol").unwrap();
 
-    let id_map = fetch_coingecko_id_map().await?;
+    let id_map = id::get_coingecko_id_map().await?;
 
-    let id = match id_map.get(symbol) {
+    // TODO: pick the token with the highest market cap
+    let m_id = id_map.get(symbol).and_then(|ids| ids.first());
+    let id = match m_id {
         Some(id) => id,
         None => {
             return Ok(Response::builder(StatusCode::NotFound)
@@ -69,53 +34,29 @@ async fn handle_get_price(req: Request<()>) -> tide::Result {
         }
     };
 
-    let prices = get_prices_by_id(id.into()).await?;
+    let prices = price::get_multi_price(id).await?;
 
     Ok(Response::builder(StatusCode::Ok)
         .body(json!(prices))
         .build())
 }
 
-async fn get_price_change(id: String, days_ago: i64) -> surf::Result<Price> {
-    let utc = Utc::now();
-    let date = utc - Duration::days(days_ago);
-    let uri = format!(
-        "https://api.coingecko.com/api/v3/coins/{}/history?date={}",
-        id,
-        date.format("%d-%m-%Y")
-    );
-
-    let history: Value = surf::get(uri).recv_json().await?;
-    let historic_price = Price {
-        usd: history["market_data"]["current_price"]["usd"]
-            .as_f64()
-            .unwrap(),
-        btc: history["market_data"]["current_price"]["btc"]
-            .as_f64()
-            .unwrap(),
-        eth: history["market_data"]["current_price"]["eth"]
-            .as_f64()
-            .unwrap(),
-    };
-
-    let current_price = get_prices_by_id(id.into()).await?;
-
-    let price_change = Price {
-        usd: current_price.usd / historic_price.usd - 1.0,
-        btc: current_price.btc / historic_price.btc - 1.0,
-        eth: current_price.eth / historic_price.eth - 1.0,
-    };
-
-    Ok(price_change)
-}
-
-async fn handle_get_price_change(req: Request<()>) -> tide::Result {
+async fn handle_get_price_change(mut req: Request<State>) -> tide::Result {
+    let Body { base, days_ago } = req.body_json().await?;
     let symbol = req.param("symbol").unwrap();
-    let days_ago = req.param("days_ago").unwrap();
 
-    let id_map = fetch_coingecko_id_map().await?;
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Body {
+        base: Base,
+        days_ago: i32,
+    }
 
-    let id = match id_map.get(symbol) {
+    let id_map = id::get_coingecko_id_map().await?;
+
+    // TODO: pick the token with the highest market cap
+    let m_id = id_map.get(symbol.clone()).and_then(|ids| ids.first());
+    let id = match m_id {
         Some(id) => id,
         None => {
             return Ok(Response::builder(StatusCode::NotFound)
@@ -124,7 +65,10 @@ async fn handle_get_price_change(req: Request<()>) -> tide::Result {
         }
     };
 
-    let historic_prices = get_price_change(id.into(), days_ago.parse()?).await?;
+    let state = req.state();
+    let historic_price_cache = Arc::clone(&state.cache);
+    let historic_prices =
+        price_change::get_price_change(historic_price_cache, id, &base, &days_ago.clone()).await?;
     Ok(Response::builder(StatusCode::Ok)
         .body(json!(historic_prices))
         .build())
@@ -133,11 +77,14 @@ async fn handle_get_price_change(req: Request<()>) -> tide::Result {
 #[async_std::main]
 async fn main() -> tide::Result<()> {
     tide::log::start();
-    let mut app = tide::new();
+    // let mut app = tide::new();
+
+    let cache = Arc::new(Mutex::new(LruCache::new(100000)));
+    let mut app = tide::with_state(State { cache });
 
     app.at("/coin/:symbol/price").get(handle_get_price);
-    app.at("/coin/:symbol/price-change/:days_ago")
-        .get(handle_get_price_change);
+    app.at("/coin/:symbol/price-change/")
+        .post(handle_get_price_change);
 
     if cfg!(debug_assertions) {
         app.listen("127.0.0.1:8080").await?;
