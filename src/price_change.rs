@@ -1,8 +1,10 @@
 use crate::base::Base;
-use crate::HistoricPriceCache;
+use crate::{id, HistoricPriceCache, ServerState};
 use chrono::{Duration, DurationRound, Utc};
 use serde::Deserialize;
 use std::convert::TryInto;
+use tide::prelude::*;
+use tide::{Request, Response, StatusCode};
 
 /// Timestamp in miliseconds
 type MsTimestamp = i64;
@@ -54,7 +56,7 @@ async fn get_historic_price(
     Ok(price)
 }
 
-pub async fn get_price_change(
+async fn get_price_change(
     historic_price_cache: HistoricPriceCache,
     id: &String,
     base: &Base,
@@ -72,4 +74,34 @@ pub async fn get_price_change(
     let today_price = (*_guard).get(&key).unwrap();
 
     Ok(*today_price / historic_price - 1.0)
+}
+pub async fn handle_get_price_change(mut req: Request<ServerState>) -> tide::Result {
+    let Body { base, days_ago } = req.body_json().await?;
+    let symbol = req.param("symbol").unwrap();
+
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Body {
+        base: Base,
+        days_ago: i32,
+    }
+
+    let id_map = id::get_coingecko_id_map().await?;
+
+    // TODO: pick the token with the highest market cap
+    let m_id = id_map.get(symbol.clone()).and_then(|ids| ids.first());
+    let id = match m_id {
+        Some(id) => id,
+        None => {
+            return Ok(Response::builder(StatusCode::NotFound)
+                .body(format!("no coingecko symbol found for {}", symbol))
+                .build())
+        }
+    };
+
+    let cache = req.state().cache.clone();
+    let historic_prices = get_price_change(cache, id, &base, &days_ago).await?;
+    Ok(Response::builder(StatusCode::Ok)
+        .body(json!(historic_prices))
+        .build())
 }
