@@ -1,19 +1,19 @@
 steps:
   # Build the container image
-  - name: "gcr.io/kaniko-project/executor:latest"
+  - name: "eu.gcr.io/kaniko-project/executor:latest"
     args:
       - --destination=gcr.io/$PROJECT_ID/farmhand:$COMMIT_SHA
       - --cache=true
       - --cache-ttl=168h
   # Deploy container image to Cloud Run
-  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+  - name: "eu.gcr.io/google.com/cloudsdktool/cloud-sdk"
     entrypoint: gcloud
     args:
       - "run"
       - "deploy"
       - "farmhand"
       - "--image"
-      - "gcr.io/$PROJECT_ID/farmhand:$COMMIT_SHA"
+      - "eu.gcr.io/$PROJECT_ID/farmhand:$COMMIT_SHA"
       - "--region"
       - "europe-west1"
       - "--platform"
