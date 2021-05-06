@@ -15,7 +15,7 @@ steps:
       - "--image"
       - "gcr.io/$PROJECT_ID/farmhand:$COMMIT_SHA"
       - "--region"
-      - "eu-west-1"
+      - "europe-west1"
       - "--platform"
       - "managed"
 images:
