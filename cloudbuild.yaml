@@ -18,6 +18,4 @@ steps:
       - "europe-west1"
       - "--platform"
       - "managed"
-images:
-  - "gcr.io/$PROJECT_ID/farmhand:$COMMIT_SHA"
 timeout: 3600s
