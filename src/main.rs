@@ -3,21 +3,19 @@ mod id;
 mod price;
 mod price_change;
 
-use async_std::sync::Mutex;
+use async_std::sync::{Arc, Mutex};
 use lru::LruCache;
-use std::sync::Arc;
+use price_change::HistoricPriceCache;
 use tide::log;
-
-pub type HistoricPriceCache = Arc<Mutex<LruCache<String, f64>>>;
 
 #[derive(Clone)]
 pub struct ServerState {
-    cache: HistoricPriceCache,
+    historic_price_cache: HistoricPriceCache,
 }
 
 #[async_std::main]
 async fn main() -> tide::Result<()> {
-    let cache = Arc::new(Mutex::new(LruCache::new(100000)));
+    let historic_price_cache = Arc::new(Mutex::new(LruCache::new(100000)));
 
     if cfg!(debug_assertions) {
         log::start();
@@ -25,7 +23,9 @@ async fn main() -> tide::Result<()> {
         log::with_level(tide::log::LevelFilter::Warn);
     }
 
-    let mut app = tide::with_state(ServerState { cache });
+    let mut app = tide::with_state(ServerState {
+        historic_price_cache,
+    });
 
     app.at("/coin/:symbol/price").get(price::handle_get_price);
     app.at("/coin/:symbol/price-change/")
