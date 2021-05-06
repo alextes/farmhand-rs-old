@@ -84,7 +84,7 @@ async fn get_price_change(
 }
 
 pub async fn handle_get_price_change(mut req: Request<ServerState>) -> tide::Result {
-    let Body { base, days_ago } = req.body_json().await.unwrap();
+    let Body { base, days_ago } = req.body_json().await?;
     let symbol = req.param("symbol").unwrap();
 
     #[derive(Debug, Deserialize)]

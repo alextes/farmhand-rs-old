@@ -30,7 +30,7 @@ async fn fetch_multi_price(id: &String) -> surf::Result<MultiPrice> {
 }
 
 pub async fn handle_get_price(req: Request<ServerState>) -> tide::Result {
-    let symbol = req.param("symbol").unwrap();
+    let symbol = req.param("symbol")?;
 
     let id_map = id::get_coingecko_id_map().await?;
 
