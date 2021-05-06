@@ -2,7 +2,7 @@ steps:
   # Build the container image
   - name: "gcr.io/kaniko-project/executor:latest"
     args:
-      - --destination=gcr.io/$PROJECT_ID/farmhand:$COMMIT_SHA
+      - --destination=eu.gcr.io/$PROJECT_ID/farmhand:$COMMIT_SHA
       - --cache=true
       - --cache-ttl=168h
   # Deploy container image to Cloud Run
