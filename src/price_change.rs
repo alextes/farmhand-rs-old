@@ -33,10 +33,8 @@ async fn get_historic_price(
     let days_ago_i64 = (*days_ago).try_into().unwrap();
     let target_timestamp = (start_of_today - Duration::days(days_ago_i64)).timestamp();
     let key = format!("{}-{}-{}", target_timestamp, id, base);
-    let mut _guard: MutexGuardArc<LruCache<std::string::String, f64>> =
-        historic_price_cache.lock_arc().await;
-
-    let m_historic_price = (*_guard).get(&key);
+    let mut cache: MutexGuardArc<LruCache<String, f64>> = historic_price_cache.lock_arc().await;
+    let m_historic_price = cache.get(&key);
     if m_historic_price.is_some() {
         return Ok(m_historic_price.unwrap().clone());
     }
@@ -51,7 +49,7 @@ async fn get_historic_price(
         // to unix time
         let timestamp = ms_timestamp / 1000;
         let historic_price_key = format!("{}-{}-{}", timestamp, id, base);
-        (*_guard).put(historic_price_key, price.to_owned());
+        cache.put(historic_price_key, price.to_owned());
     }
 
     let (_, price) = history.prices.first().unwrap().to_owned();
