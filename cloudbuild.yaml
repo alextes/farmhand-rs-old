@@ -2,7 +2,7 @@ steps:
   # Build the container image
   - name: "gcr.io/kaniko-project/executor:latest"
     args:
-      - --destination=gcr.io/crypto-gohan/image
+      - --destination=gcr.io/$PROJECT_ID/image
       - --cache=true
       - --cache-ttl=168h
   # Deploy container image to Cloud Run
