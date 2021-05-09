@@ -19,3 +19,5 @@ steps:
       - "--platform"
       - "managed"
 timeout: 3600s
+options:
+  machineType: e2-highcpu-8
