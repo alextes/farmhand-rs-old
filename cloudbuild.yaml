@@ -20,4 +20,4 @@ steps:
       - "managed"
 timeout: 3600s
 options:
-  machineType: e2-highcpu-8
+  machineType: N1_HIGHCPU_8
