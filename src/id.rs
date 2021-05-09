@@ -25,5 +25,13 @@ pub async fn get_coingecko_id_map() -> surf::Result<IdMap> {
         id_list.push(raw_id.id);
     }
 
+    // Some symbols have multiple IDs, we don't support retrieving the map sorted by highest market
+    // cap yet, or by contract, so we hardcode some overwrites that are probably returning the
+    // token the caller is actually looking for.
+    id_map.insert(String::from("uni"), vec![String::from("uniswap")]);
+    id_map.insert(String::from("ftt"), vec![String::from("ftx-token")]);
+
     Ok(id_map)
 }
+
+// TODO: getIdMapSortedByMarketCap
