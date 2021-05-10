@@ -1,4 +1,4 @@
-use crate::base::Base;
+use crate::{base::Base, request};
 use crate::{id, ServerState};
 use async_std::sync::{Arc, Mutex, MutexGuardArc};
 use chrono::{Duration, DurationRound, Utc};
@@ -18,7 +18,7 @@ type Price = f64;
 type PriceInTime = (MsTimestamp, Price);
 type NumberInTime = (MsTimestamp, Price);
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 /// CoinGecko price history for a cryptocurrency
 struct History {
     prices: Vec<PriceInTime>,
@@ -46,7 +46,7 @@ async fn get_historic_price(
     // including so we add 1 here.
     let coingecko_days_ago = days_ago + 1;
     let uri = format!("https://api.coingecko.com/api/v3/coins/{id}/market_chart?vs_currency={base}&days={coingecko_days_ago}&interval=daily", id=id, base=base, coingecko_days_ago=coingecko_days_ago);
-    let history: History = surf::get(uri).recv_json().await?;
+    let history: History = request::get_json(std::time::Duration::from_secs(5), &uri).await?;
 
     for (ms_timestamp, price) in &history.prices {
         // to unix time

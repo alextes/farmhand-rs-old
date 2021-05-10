@@ -2,6 +2,7 @@ mod base;
 mod id;
 mod price;
 mod price_change;
+mod request;
 
 use async_std::sync::{Arc, Mutex};
 use lru::LruCache;

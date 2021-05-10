@@ -1,10 +1,12 @@
 use cached::proc_macro::cached;
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
+
+use crate::request;
 
 type IdMap = HashMap<String, Vec<String>>;
 
-#[derive(Debug, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
 struct CoinId {
     id: String,
     symbol: String,
@@ -13,9 +15,8 @@ struct CoinId {
 
 #[cached(time = 86400, result = true)]
 pub async fn get_coingecko_id_map() -> surf::Result<IdMap> {
-    let coingecko_id_list: Vec<CoinId> = surf::get("https://api.coingecko.com/api/v3/coins/list")
-        .recv_json()
-        .await?;
+    let uri = String::from("https://api.coingecko.com/api/v3/coins/list");
+    let coingecko_id_list: Vec<CoinId> = request::get_json(Duration::from_secs(5), &uri).await?;
 
     type IdMap = HashMap<String, Vec<String>>;
     let mut id_map: IdMap = HashMap::new();
