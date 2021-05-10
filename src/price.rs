@@ -1,7 +1,10 @@
-use crate::id;
 use crate::ServerState;
+use crate::{id, request};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::error::Error;
+use std::fmt;
+use std::time::Duration;
 use tide::prelude::*;
 use tide::{Request, Response, StatusCode};
 
@@ -18,15 +21,44 @@ struct MultiPrice {
     eth: f64,
 }
 
+#[derive(Debug)]
+struct LookupError {
+    details: String,
+}
+
+impl LookupError {
+    fn new(msg: String) -> LookupError {
+        LookupError { details: msg }
+    }
+}
+
+impl fmt::Display for LookupError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.details)
+    }
+}
+
+impl Error for LookupError {
+    fn description(&self) -> &str {
+        &self.details
+    }
+}
+
 async fn fetch_multi_price(id: &String) -> surf::Result<MultiPrice> {
     let uri = format!(
         "https://api.coingecko.com/api/v3/simple/price?ids={}&vs_currencies=usd%2Cbtc%2Ceth",
         id
     );
-    let prices: HashMap<String, MultiPrice> = surf::get(uri).recv_json().await?;
+    let prices: HashMap<String, MultiPrice> =
+        request::get_json(Duration::from_secs(5), &uri).await?;
 
-    let price = prices.get(id).unwrap().to_owned();
-    Ok(price)
+    prices
+        .get(id)
+        .ok_or(tide::Error::new(
+            StatusCode::NotFound,
+            LookupError::new(format!("no price for id: {}", id)),
+        ))
+        .map(|r| r.to_owned())
 }
 
 pub async fn handle_get_price(req: Request<ServerState>) -> tide::Result {
